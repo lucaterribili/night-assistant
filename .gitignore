@@ -1,4 +1,22 @@
-/.venv/
-/.cadence/
-/.env
+# Python specific
+venv/
+.venv/
+*.pyc
+*.pyo
+__pycache__/
+*.pyd
+*.pdb
+*.log
+
+# Django specific
+*.sqlite3
+db.sqlite3
+*.db
+
+# Settings file with sensitive information
+.env
+*.env
+
+# PyCharm specific
 .idea/
+.cadence/
