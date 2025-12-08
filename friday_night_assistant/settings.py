@@ -43,7 +43,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'friday_night_assistant.llm',
+    'friday_night_assistant',
+    # Apps holding our models (located under friday_night_assistant/models/)
+    'friday_night_assistant.models.mysql_models.apps.MysqlModelsConfig',
+    'friday_night_assistant.models.pg_models.apps.PgModelsConfig',
 ]
 
 MIDDLEWARE = [
@@ -82,10 +85,28 @@ WSGI_APPLICATION = 'friday_night_assistant.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.getenv('MYSQL_DATABASE', 'friday_db'),
+        'USER': os.getenv('MYSQL_USER', 'root'),
+        'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
+        'HOST': os.getenv('MYSQL_HOST', 'localhost'),
+        'PORT': os.getenv('MYSQL_PORT', '3306'),
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+    },
+    'postgres': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_DB', 'friday_pg'),
+        'USER': os.getenv('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
 }
+
+# Database routers: route mysql_models -> default (MySQL) and pg_models -> postgres (Postgres)
+DATABASE_ROUTERS = ['friday_night_assistant.db_routers.DatabaseAppsRouter']
 
 
 # Password validation
