@@ -34,6 +34,12 @@ class DatabaseAppsRouter:
             return True
         if obj1._meta.app_label in self.pg_apps and obj2._meta.app_label in self.pg_apps:
             return True
+
+        # Allow relations for Django built-in apps (auth, contenttypes, admin, sessions)
+        django_apps = {'auth', 'contenttypes', 'admin', 'sessions'}
+        if obj1._meta.app_label in django_apps or obj2._meta.app_label in django_apps:
+            return True
+
         # No cross-db relations
         return False
 
@@ -49,4 +55,3 @@ class DatabaseAppsRouter:
             return db == 'postgres'
         # Default behaviour
         return db == 'default'
-

@@ -3,7 +3,8 @@ from django.db import models
 
 class AgentMemory(models.Model):
     """Simple key/value store for agent memory."""
-    key = models.CharField(max_length=255, unique=True)
+    id = models.AutoField(primary_key=True)
+    key = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     value = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -15,7 +16,7 @@ class AgentMemory(models.Model):
         managed = True
 
     def __str__(self):
-        return f"{self.key}"
+        return f"{self.id}"
 
 
 class AgentTask(models.Model):
@@ -42,4 +43,3 @@ class AgentTask(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.status})"
-

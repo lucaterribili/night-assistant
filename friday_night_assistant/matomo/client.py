@@ -1,99 +1,101 @@
 import os
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 
 
 class MatomoClient:
-    """Simple Matomo HTTP API client.
-
-    Reads MATOMO_URL and MATOMO_AUTH_TOKEN from environment by default.
-
-    Usage:
-        client = MatomoClient()
-        visits = client.get_visits(site_id=1, period="day", date="2025-01-01")
-    """
-
     def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None, timeout: int = 10):
         self.base_url = base_url or os.environ.get("MATOMO_URL")
         self.token = token or os.environ.get("MATOMO_AUTH_TOKEN")
         self.timeout = timeout
-
         if not self.base_url:
-            raise ValueError("MATOMO_URL not set (either pass base_url or set MATOMO_URL env var)")
+            raise ValueError("MATOMO_URL not set")
         if not self.token:
-            raise ValueError("MATOMO_AUTH_TOKEN not set (either pass token or set MATOMO_AUTH_TOKEN env var)")
-
-        # Normalize base url
+            raise ValueError("MATOMO_AUTH_TOKEN not set")
         if not self.base_url.endswith("/"):
-            self.base_url = self.base_url + "/"
+            self.base_url += "/"
 
-    def _api_request(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        params = params.copy()
-        params.update({
-            "module": "API",
-            "format": "JSON",
-            # token_auth moved to POST body per user request
-        })
+    def _api_request(self, params: Dict[str, Any], normalize: Optional[Callable] = None) -> Any:
         url = self.base_url + "index.php"
-        # Send a POST so the token can be supplied in the request body
-        # Keep the API method/args in the query string (like the curl example) and put token_auth in the POST data
-        data = {"token_auth": self.token}
-        resp = requests.post(url, params=params, data=data, timeout=self.timeout)
+        fixed = {"module": "API", "format": "JSON"}
+        full = {**params, **fixed}
+        resp = requests.post(url, params=full, data={"token_auth": self.token}, timeout=self.timeout)
         resp.raise_for_status()
         try:
-            return resp.json()
-        except ValueError:
-            raise RuntimeError("Matomo returned non-json response: %s" % resp.text)
+            data = resp.json()
+        except Exception:
+            raise RuntimeError("Matomo returned non-json: %s" % resp.text)
 
-    def get_visits(self, site_id: int, period: str = "day", date: str = "today") -> Dict[str, Any]:
-        """Return visits metric for a site_id for given period/date.
+        if normalize:
+            try:
+                return normalize(data)
+            except Exception:
+                raise RuntimeError("Normalization failed")
 
-        site_id: 1,2,3
-        period: day|week|month|year|range
-        date: e.g. today, 2025-01-01, 2025-01-01,2025-01-31
-        """
-        params = {
+        return data
+
+    def get_visits(self, site_id: int, period: str = "day", date: str = "today"):
+        return self._api_request({
             "method": "VisitsSummary.get",
             "idSite": site_id,
             "period": period,
-            "date": date,
-        }
-        return self._api_request(params)
+            "date": date
+        }, normalize=lambda d: {
+            "visits": d.get("nb_visits")
+        })
 
-    def get_pageviews(self, site_id: int, period: str = "day", date: str = "today") -> Dict[str, Any]:
-        params = {
+    def get_pageviews(self, site_id: int, period: str = "day", date: str = "today"):
+        return self._api_request({
             "method": "Actions.get",
             "idSite": site_id,
             "period": period,
-            "date": date,
-        }
-        return self._api_request(params)
+            "date": date
+        }, normalize=lambda d: {
+            "pageviews": d.get("nb_pageviews")
+        })
 
-    def get_top_pages(self, site_id: int, period: str = "day", date: str = "today", limit: int = 10) -> Dict[str, Any]:
-        params = {
+    def get_top_pages(self, site_id: int, period: str = "day", date: str = "today", limit: int = 10):
+        def norm(d):
+            items = d if isinstance(d, list) else list(d.values())
+            out = []
+            for item in items[:limit]:
+                url = item.get("url") or item.get("label") or "N/A"
+                pv = item.get("nb_hits") or item.get("nb_visits")
+                out.append({"url": url, "pageviews": pv})
+            return out
+
+        return self._api_request({
             "method": "Actions.getPageUrls",
             "idSite": site_id,
             "period": period,
             "date": date,
-            "filter_limit": limit,
-        }
-        return self._api_request(params)
+            # use flat=1 to return a flattened list of page URLs instead of hierarchical tree
+            "flat": 1,
+            "filter_limit": limit
+        }, normalize=norm)
 
+    def get_worst_bounce_urls(self, site_id: int, period: str = "day", date: str = "today", limit: int = 50):
+        def norm(d):
+            items = d if isinstance(d, list) else list(d.values())
+            out = []
+            for item in items[:limit]:
+                url = item.get("url") or item.get("label") or item.get("pageUrl") or "N/A"
+                b = item.get("bounce_rate")
+                try:
+                    b = float(b)
+                except Exception:
+                    pass
+                out.append({"url": url, "bounce_rate": b})
+            return out
 
-# Small convenience function to iterate over known sites
-def get_all_sites_data(client: MatomoClient, site_ids=(1, 2, 3), period: str = "day", date: str = "today"):
-    results = {}
-    for sid in site_ids:
-        try:
-            results[sid] = client.get_visits(site_id=sid, period=period, date=date)
-        except Exception as e:
-            # Avoid leaking the token in logs/errors. If the token appears in the exception text, redact it.
-            err_text = str(e)
-            try:
-                token = getattr(client, "token", None)
-                if token and token in err_text:
-                    err_text = err_text.replace(token, "<REDACTED>")
-            except Exception:
-                pass
-            results[sid] = {"error": err_text}
-    return results
+        return self._api_request({
+            "method": "Actions.getPageUrls",
+            "idSite": site_id,
+            "period": period,
+            "date": date,
+            # return flattened list so we get all page urls rather than only top-level nodes
+            "flat": 1,
+            "filter_sort_column": "bounce_rate",
+            "filter_sort_order": "desc",
+            "filter_limit": limit
+        }, normalize=norm)

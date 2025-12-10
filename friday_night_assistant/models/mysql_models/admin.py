@@ -4,8 +4,8 @@ from .models import AgentMemory, AgentTask
 
 @admin.register(AgentMemory)
 class AgentMemoryAdmin(admin.ModelAdmin):
-    list_display = ('key', 'updated_at')
-    search_fields = ('key',)
+    list_display = ('id', 'key', 'updated_at')
+    search_fields = ('id', 'key')
 
 
 @admin.register(AgentTask)
