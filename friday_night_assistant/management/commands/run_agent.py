@@ -151,7 +151,9 @@ class Command(BaseCommand):
 
     def _build_prompt(self, methods: List[Dict], state: Any, memory_section: str) -> str:
         """Costruisce il prompt per l'LLM."""
-        prompt_base = """Sei un assistente che gestisce un sistema di contenuti web. I siti nel sistema hanno id 1, 2 e 3
+        prompt_base = """Sei un assistente che gestisce un sistema di contenuti web. I siti nel sistema hanno id 1, 2 e 3.
+        
+        I contenuti dei siti sono di tipo blog e tutorial.
 
 Hai questi metodi disponibili:
 {methods}

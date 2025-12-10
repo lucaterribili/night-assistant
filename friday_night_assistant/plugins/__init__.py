@@ -24,7 +24,7 @@ class AgentPlugins:
         return [
             {
                 "name": "get_top_bounce_urls",
-                "description": "Get top URLs by bounce rate from Matomo analytics",
+                "description": "Get top URLs by bounce rate from Matomo analytics. IMPORTANT: Results include 'type' field. ALWAYS check the 'type' field before choosing the next method: if type='tutorial' call get_tutorial_by_slug, if type='blog' call get_post_by_slug.",
                 "parameters": {
                     "site_id": {
                         "type": "int",
@@ -54,15 +54,27 @@ class AgentPlugins:
             },
             {
                 "name": "get_post_by_slug",
-                "description": "Find a Post by slug using multiple search strategies",
+                "description": "Find a BLOG POST by slug. ONLY for type='blog'.",
                 "parameters": {
                     "slug": {
                         "type": "str",
                         "required": True,
-                        "description": "The post slug to search for"
+                        "description": "The blog post slug to search for"
                     }
                 },
-                "returns": "Post object or None if not found"
+                "returns": "Post object (type 'blog') or None if not found"
+            },
+            {
+                "name": "get_tutorial_by_slug",
+                "description": "Find a TUTORIAL by slug. ONLY for type='tutorial'.",
+                "parameters": {
+                    "slug": {
+                        "type": "str",
+                        "required": True,
+                        "description": "The tutorial slug to search for"
+                    }
+                },
+                "returns": "Post object (type 'tutorial') or None if not found"
             }
         ]
 
@@ -159,6 +171,68 @@ class AgentPlugins:
         return None
 
     @staticmethod
+    def get_tutorial_by_slug(slug: str) -> Optional[Post]:
+        """Find a tutorial Post by slug with multiple fallback strategies.
+
+        This method mirrors `get_post_by_slug` but restricts results to posts
+        that are tutorials (expected `type == 'tutorial'`). The implementation
+        is defensive: if the `type` field or specific lookups are not available
+        on the model, it falls back to the same searches and verifies the
+        returned object's `type` attribute.
+        """
+        # Strategy 1: Direct slug + type filter
+        try:
+            return Post.objects.get(slug=slug, type='tutorial')
+        except (FieldError, Post.DoesNotExist):
+            # If the type field does not exist or there is no exact match, continue
+            pass
+        except Exception as e:
+            logger.debug(f"Direct tutorial lookup failed for slug={slug}: {e}")
+
+        # Strategy 2: JSON fields search (prefer filtering by type when supported)
+        for field in ["body", "title"]:
+            try:
+                # try with type filter first
+                post = Post.objects.filter(type='tutorial', **{f"{field}__contains": {"slug": slug}}).first()
+                if post:
+                    logger.info(f"Tutorial post found via JSON field: {field}")
+                    return post
+            except FieldError:
+                # Model may not support `type` or JSON lookup; try without type and then verify
+                try:
+                    post = Post.objects.filter(**{f"{field}__contains": {"slug": slug}}).first()
+                    if post and getattr(post, 'type', None) == 'tutorial':
+                        logger.info(f"Tutorial post found via JSON field (post-verified): {field}")
+                        return post
+                except Exception:
+                    continue
+            except Exception as e:
+                logger.debug(f"JSON tutorial search failed for field {field}: {e}")
+                continue
+
+        # Strategy 3: Case-insensitive text search, prefer type filtering
+        for field in ["title", "body"]:
+            try:
+                post = Post.objects.filter(type='tutorial', **{f"{field}__icontains": slug}).first()
+                if post:
+                    logger.info(f"Tutorial post found via text search: {field}")
+                    return post
+            except FieldError:
+                try:
+                    post = Post.objects.filter(**{f"{field}__icontains": slug}).first()
+                    if post and getattr(post, 'type', None) == 'tutorial':
+                        logger.info(f"Tutorial post found via text search (post-verified): {field}")
+                        return post
+                except Exception:
+                    continue
+            except Exception as e:
+                logger.debug(f"Text tutorial search failed for field {field}: {e}")
+                continue
+
+        logger.warning(f"Tutorial post not found for slug: {slug}")
+        return None
+
+    @staticmethod
     def _process_page_data(page: Any) -> Optional[Dict[str, Any]]:
         """Process a single page entry from Matomo response.
 
@@ -173,16 +247,10 @@ class AgentPlugins:
             logger.warning(f"Skipping non-dict page item: {type(page).__name__}")
             return None
 
-        # Extract URL
-        url = page.get("label") or page.get("url")
-        if not url:
-            return None
-
         # Calculate bounce rate
         bounce_rate = AgentPlugins._extract_bounce_rate(page)
 
         return {
-            "url": url,
             "bounce_rate": bounce_rate,
             **page
         }
@@ -234,4 +302,3 @@ class AgentPlugins:
             return -float(bounce_rate) if bounce_rate is not None else float('inf')
         except (ValueError, TypeError):
             return float('inf')
-
