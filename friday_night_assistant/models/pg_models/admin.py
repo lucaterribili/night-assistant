@@ -17,7 +17,7 @@ class PostAdmin(admin.ModelAdmin):
 
 @admin.register(Tutorial)
 class TutorialAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title_display', 'status', 'counter')
+    list_display = ('id', 'title_display', 'status')
     search_fields = ('title',)
 
     def title_display(self, obj):

@@ -24,7 +24,7 @@ class AgentPlugins:
         return [
             {
                 "name": "get_top_bounce_urls",
-                "description": "Get top URLs by bounce rate from Matomo analytics. IMPORTANT: Results include 'type' field. ALWAYS check the 'type' field before choosing the next method: if type='tutorial' call get_tutorial_by_slug, if type='blog' call get_post_by_slug.",
+                "description": "Get top URLs by bounce rate from Matomo analytics. IMPORTANT: Results include 'type' field. ALWAYS check the 'type' field before choosing the next method: if type='tutorial' call delegate_to_tutorial_agent, if type='blog' call delegate_to_post_agent.",
                 "parameters": {
                     "site_id": {
                         "type": "int",
@@ -75,6 +75,42 @@ class AgentPlugins:
                     }
                 },
                 "returns": "Post object (type 'tutorial') or None if not found"
+            },
+            {
+                "name": "delegate_to_post_agent",
+                "description": "Delegate work to the specialized PostAgent for blog post operations. Use this when you need to analyze, improve, or modify a blog post.",
+                "parameters": {
+                    "slug": {
+                        "type": "str",
+                        "required": True,
+                        "description": "The blog post slug"
+                    },
+                    "task": {
+                        "type": "str",
+                        "required": False,
+                        "default": "analyze_and_improve",
+                        "description": "Task for PostAgent: 'analyze', 'improve', 'update', etc."
+                    }
+                },
+                "returns": "Result from PostAgent execution"
+            },
+            {
+                "name": "delegate_to_tutorial_agent",
+                "description": "Delegate work to the specialized TutorialAgent for tutorial operations. Use this when you need to analyze, improve, or modify a tutorial.",
+                "parameters": {
+                    "slug": {
+                        "type": "str",
+                        "required": True,
+                        "description": "The tutorial slug"
+                    },
+                    "task": {
+                        "type": "str",
+                        "required": False,
+                        "default": "analyze_and_improve",
+                        "description": "Task for TutorialAgent: 'analyze', 'improve', 'check_structure', etc."
+                    }
+                },
+                "returns": "Result from TutorialAgent execution"
             }
         ]
 
@@ -302,3 +338,78 @@ class AgentPlugins:
             return -float(bounce_rate) if bounce_rate is not None else float('inf')
         except (ValueError, TypeError):
             return float('inf')
+
+    @staticmethod
+    def delegate_to_post_agent(slug: str, task: str = 'analyze_and_improve') -> Dict[str, Any]:
+        """Delegate work to PostAgent for blog post operations.
+
+        This method instantiates and runs the PostAgent with the specified slug and task.
+        The PostAgent will autonomously decide which actions to take to complete the task.
+
+        Args:
+            slug: The blog post slug to work on
+            task: The task type (optional, PostAgent will decide specific actions)
+
+        Returns:
+            Dictionary with execution results from PostAgent
+        """
+        try:
+            from friday_night_assistant.management.commands.run_post_agent import Command as PostAgentCommand
+
+            logger.info(f"Delegating to PostAgent: slug={slug}, task={task}")
+
+            # Crea un'istanza del PostAgent
+            post_agent = PostAgentCommand()
+
+            # Esegui l'agente programmaticamente
+            result = post_agent.execute(slug=slug, task=task)
+
+            logger.info(f"PostAgent completed: {result}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error delegating to PostAgent: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'agent': 'PostAgent',
+                'slug': slug
+            }
+
+    @staticmethod
+    def delegate_to_tutorial_agent(slug: str, task: str = 'analyze_and_improve') -> Dict[str, Any]:
+        """Delegate work to TutorialAgent for tutorial operations.
+
+        This method instantiates and runs the TutorialAgent with the specified slug and task.
+        The TutorialAgent will autonomously decide which actions to take to complete the task.
+
+        Args:
+            slug: The tutorial slug to work on
+            task: The task type (optional, TutorialAgent will decide specific actions)
+
+        Returns:
+            Dictionary with execution results from TutorialAgent
+        """
+        try:
+            from friday_night_assistant.management.commands.run_tutorial_agent import Command as TutorialAgentCommand
+
+            logger.info(f"Delegating to TutorialAgent: slug={slug}, task={task}")
+
+            # Crea un'istanza del TutorialAgent
+            tutorial_agent = TutorialAgentCommand()
+
+            # Esegui l'agente programmaticamente
+            result = tutorial_agent.execute(slug=slug, task=task)
+
+            logger.info(f"TutorialAgent completed: {result}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error delegating to TutorialAgent: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'agent': 'TutorialAgent',
+                'slug': slug
+            }
+

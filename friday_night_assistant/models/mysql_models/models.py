@@ -5,6 +5,8 @@ class AgentMemory(models.Model):
     """Simple key/value store for agent memory."""
     id = models.AutoField(primary_key=True)
     key = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+    agent_type = models.CharField(max_length=50, default='main', db_index=True,
+                                   help_text="Type of agent: 'main', 'post', 'tutorial'")
     value = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -14,9 +16,12 @@ class AgentMemory(models.Model):
         verbose_name = 'Agent Memory'
         verbose_name_plural = 'Agent Memories'
         managed = True
+        indexes = [
+            models.Index(fields=['agent_type', 'created_at']),
+        ]
 
     def __str__(self):
-        return f"{self.id}"
+        return f"{self.agent_type}:{self.id}"
 
 
 class AgentTask(models.Model):

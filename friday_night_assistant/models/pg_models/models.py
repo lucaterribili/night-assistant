@@ -29,7 +29,7 @@ class Tutorial(models.Model):
     title = models.JSONField()
     status = models.CharField(max_length=50, blank=True, null=True)
     body = models.JSONField(blank=True, null=True)
-    counter = models.IntegerField(default=0)
+    slug = models.JSONField(blank=True, null=True)
 
     class Meta:
         app_label = 'pg_models'
